@@ -113,10 +113,16 @@ def check_upcoming_promotions():
     *หากไม่มีโปรโมชั่นใดเข้าเงื่อนไขในช่วง 3 วันนี้ ให้ตอบคำเดียวว่า: NO_ALERT*
     """
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt
-    )
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt
+        )
+    except Exception as e:
+        # Gemini ชั่วคราวไม่ว่าง (เช่น 503) — ข้ามการแจ้งเตือนรอบนี้
+        # แต่ไม่ให้ job พัง เพราะฐานข้อมูลอัปเดตเรียบร้อยแล้ว
+        print(f"  สร้างข้อความแจ้งเตือนไม่สำเร็จ (Gemini ชั่วคราวไม่ว่าง): {e}")
+        return
 
     alert_content = response.text.strip()
 

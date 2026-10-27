@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 from datetime import datetime
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -151,7 +152,11 @@ def send_telegram_message(message: str, button_url: str = None, button_text: str
 
 
 async def extract_promos_from_page(client, page_text: str, source_url: str) -> list[PromoItem]:
-    """ส่งข้อความหน้าเว็บให้ Gemini แปลงเป็นรายการโปรโมชั่นแบบมีโครงสร้าง"""
+    """ส่งข้อความหน้าเว็บให้ Gemini แปลงเป็นรายการโปรโมชั่นแบบมีโครงสร้าง
+
+    ถ้า Gemini ชั่วคราวไม่ว่าง (503/429 — คนใช้เยอะ) จะรอแล้วลองใหม่
+    สูงสุด 3 ครั้ง ก่อนยอมแพ้ (error อื่น เช่น key ผิด จะพังทันทีไม่รอ)
+    """
     prompt = f"""
     คุณคือระบบดึงข้อมูลโปรโมชั่นบัตรเครดิตจากหน้าเว็บธนาคาร
     URL ต้นทาง: {source_url}
@@ -172,16 +177,31 @@ async def extract_promos_from_page(client, page_text: str, source_url: str) -> l
     - min_spend ใส่เป็นตัวเลขบาท (ถ้าไม่ระบุให้ใส่ 0)
     - ถ้าไม่มีโปรโมชั่นที่เข้าเงื่อนไขเลย ให้คืน promotions เป็นลิสต์ว่าง
     """
-    response = await client.aio.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=PromoCollection,
-        ),
-    )
-    collection = PromoCollection.model_validate_json(response.text)
-    return collection.promotions
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = await client.aio.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=PromoCollection,
+                ),
+            )
+            collection = PromoCollection.model_validate_json(response.text)
+            return collection.promotions
+        except Exception as e:
+            last_error = e
+            if "503" not in str(e) and "429" not in str(e) and "UNAVAILABLE" not in str(e) \
+                    and "RESOURCE_EXHAUSTED" not in str(e) and "overloaded" not in str(e) \
+                    and "high demand" not in str(e):
+                raise  # error ถาวร (เช่น key ผิด, โมเดลไม่มี) ไม่ต้องรอ
+            if attempt == 2:
+                raise
+            wait = 30 * (attempt + 1)
+            print(f"  Gemini ชั่วคราวไม่ว่าง ({str(e)[:100]}), รอ {wait} วินาทีแล้วลองใหม่ (ครั้งที่ {attempt + 2}/3)")
+            await asyncio.sleep(wait)
+    raise last_error
 
 
 async def _click_if_visible(page, selectors):
@@ -310,6 +330,7 @@ async def main():
     total_found = 0
     total_pages = 0
     new_records = []  # โปรใหม่เดือนนี้ (ไว้จัดอันดับโปรเด่น)
+    failed_banks = []  # ธนาคารที่อ่านไม่สำเร็จ (จะได้ไม่พังทั้งรอบเพราะธนาคารเดียว)
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     conn = get_connection()
@@ -318,7 +339,12 @@ async def main():
             browser = await p.chromium.launch(headless=True)
             try:
                 for url in TARGET_URLS:
-                    promos, pages = await scrape_bank_pages(browser, client, url)
+                    try:
+                        promos, pages = await scrape_bank_pages(browser, client, url)
+                    except Exception as e:
+                        print(f"  ข้าม {urlparse(url).netloc}: {e}")
+                        failed_banks.append(urlparse(url).netloc)
+                        continue
                     total_pages += pages
                     total_found += len(promos)
                     new_count = 0
@@ -353,13 +379,17 @@ async def main():
     if held_new:
         top_section = await rank_top_promos(client, held_new)
 
+    status_icon = "✅" if not failed_banks else "⚠️"
+    status_text = "อัปเดตโปรโมชั่นบัตรเครดิตประจำเดือนสำเร็จ" if not failed_banks else "อัปเดตโปรโมชั่นประจำเดือนสำเร็จบางส่วน"
     summary = (
-        f"✅ *อัปเดตโปรโมชั่นบัตรเครดิตประจำเดือนสำเร็จ*\n\n"
+        f"{status_icon} *{status_text}*\n\n"
         f"• ตรวจ {len(TARGET_URLS)} เว็บธนาคาร ({total_pages} หน้า)\n"
         f"• พบโปรโมชั่นทั้งหมด {total_found} รายการ\n"
         f"• ใหม่ {total_new} รายการ / อัปเดต {total_updated} รายการ\n"
         f"• ฐานข้อมูลมีทั้งหมด {total_in_db} รายการ"
     )
+    if failed_banks:
+        summary += f"\n• ⚠️ อ่านไม่สำเร็จ {len(failed_banks)} ธนาคาร ({', '.join(failed_banks)}) — จะลองใหม่รอบหน้า"
     if top_section:
         summary += f"\n\n🏆 *โปรเด่นเดือนนี้ (บัตรที่ถืออยู่)*\n{top_section}"
     print(summary)
