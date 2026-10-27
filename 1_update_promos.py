@@ -25,7 +25,7 @@ from playwright.async_api import async_playwright
 from pydantic import BaseModel, Field
 
 from advisor import MY_BANKS, MY_CARDS
-from db import count_all, get_connection, upsert_promo
+from db import GEMINI_MODEL, count_all, get_connection, upsert_promo
 
 API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -173,7 +173,7 @@ async def extract_promos_from_page(client, page_text: str, source_url: str) -> l
     - ถ้าไม่มีโปรโมชั่นที่เข้าเงื่อนไขเลย ให้คืน promotions เป็นลิสต์ว่าง
     """
     response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash",
+        model=GEMINI_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -233,7 +233,7 @@ async def rank_top_promos(client, new_promos: list[dict]) -> str:
     """
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+            model=GEMINI_MODEL,
             contents=prompt,
         )
         return (response.text or "").strip()

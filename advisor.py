@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # ให้รันบนเครื่อง/NAS อ่านค่าจากไฟล์ .env ได้
 
-from db import DB_PATH, find_candidates, get_connection
+from db import DB_PATH, GEMINI_MODEL, find_candidates, get_connection
 
 API_KEY = os.getenv("GEMINI_API_KEY", "")
 
@@ -112,7 +112,7 @@ def rank_with_gemini(
     4. ข้อควรระวัง / เงื่อนไขที่ห้ามพลาด (เช่น รหัส SMS, สิทธิ์จำกัด)
     """
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=GEMINI_MODEL,
         contents=prompt,
     )
     return response.text

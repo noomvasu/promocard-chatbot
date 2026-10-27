@@ -15,7 +15,7 @@ load_dotenv()  # ให้รันบนเครื่องอ่านค่
 
 import requests
 
-from db import get_connection, load_all
+from db import GEMINI_MODEL, get_connection, load_all
 
 API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -114,7 +114,7 @@ def check_upcoming_promotions():
     """
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=GEMINI_MODEL,
         contents=prompt
     )
 

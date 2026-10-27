@@ -14,6 +14,12 @@ from datetime import date
 # ค่าเริ่มต้นเหมือนเดิม: promotions.db ในโฟลเดอร์เดียวกับโค้ด
 DB_PATH = os.getenv("PROMOTIONS_DB", "promotions.db")
 
+# โมเดล Gemini ที่ใช้ทั้งระบบ (สกัดโปร, จัดอันดับ, แจ้งเตือน, แนะนำบัตร)
+# เปลี่ยนได้ด้วย env var GEMINI_MODEL โดยไม่ต้องแก้โค้ด
+# หมายเหตุ: gemini-2.5-flash เลิกให้บริการกับผู้ใช้ใหม่แล้ว
+# (รันจริงครั้งแรก 2026-10-28 พังด้วย 404 NOT_FOUND) Google แนะนำให้ใช้รุ่นนี้แทน
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS promotions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
