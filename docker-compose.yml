@@ -1,0 +1,18 @@
+# รัน Telegram bot บน Synology NAS (Container Manager รองรับ compose)
+# วิธีใช้: clone repo นี้ลง NAS แล้วรัน `docker compose up -d` ในโฟลเดอร์นี้
+# (ดู README หัวข้อ "รันบอทบน NAS ด้วย Docker")
+services:
+  promo-bot:
+    build: .
+    container_name: promo-chatbot
+    restart: unless-stopped
+    # .env ไฟล์เดียวกับที่ใช้รันบนเครื่อง (มี TELEGRAM_BOT_TOKEN, GEMINI_API_KEY)
+    env_file:
+      - .env
+    volumes:
+      # mount โฟลเดอร์ repo ทั้งโฟลเดอร์: บอทอ่าน promotions.db จากตรงนี้
+      # และ sync_db.sh / git pull จะอัปเดตไฟล์นี้ให้ทุกเดือน
+      - .:/app
+    # กันบอทรันซ้ำซ้อนถ้าเผลอกดรัน bot.py บนเครื่องพร้อมกัน (Telegram polling ชนกัน)
+    deploy:
+      replicas: 1
